@@ -11,25 +11,25 @@
     [Parameter(ParameterSetName=’removeHosts’)]
     [switch] $remove,
 
-    [Parameter(ParameterSetName=’addHosts’)]
-    [Parameter(ParameterSetName=’removeHosts’)]
+    [Parameter(ParameterSetName=’addHosts’, Position=0)]
+    [Parameter(ParameterSetName=’removeHosts’, Position=0)]
     [string] $HostName,
 
-    [Parameter(ParameterSetName=’addHosts’)]
-    [Parameter(ParameterSetName=’removeHosts’)]
+    [Parameter(ParameterSetName=’addHosts’, Position=1)]
+    [Parameter(ParameterSetName=’removeHosts’, Position=1)]
     [string] $IPAddress,
 
     [Parameter(ParameterSetName=’addHosts’)]
     [switch] $ReplaceIfExists,
 
     [Parameter(ParameterSetName=’addHosts’)]
+    [Parameter(ParameterSetName=’removeHosts’)]
     [string] $Comment
 )
 
 $hosts = "$($env:windir)\System32\drivers\etc\hosts"
 $changesMade = $false
 $entries = @()
-
 
 function IsAdministrator
 {  
@@ -44,6 +44,7 @@ function ExitWithMessage([int] $exitCode, [ConsoleColor] $ForegroundColor, [stri
 
     write-host $newMsg -ForegroundColor $ForegroundColor
     #$host.SetShouldExit($exitCode)
+    $false
     exit $exitCode
 }
 
@@ -107,7 +108,7 @@ function GetHostsFile([string] $hostsPath) {
 
 function ListEntries($entries) {
     if ($list.IsPresent -eq $false) { return }
-    $entries | where {$_.IsEntry} | select Host, Address | sort Host
+    $entries | where {$_.IsEntry} | select Host, Address, Comment | sort Host
 }
 
 
@@ -142,6 +143,20 @@ function AddEntry([string]$newHost, [string] $newIP, [bool] $replace, [string] $
     $addEntry.IsEntry = $true
 
     $Script:changesMade = $true
+}
+
+function RemoveEntry([string]$oldHost, [string] $oldIP, [string] $oldComment) {
+    $targetIP = "$oldIP".Trim()
+    $targetName = "$oldHost".Trim()
+    $targetComment = "$oldComment".Trim()
+
+    $entries | % {
+        if ($_.Host -eq $targetName -or $_.Address -eq $targetIP -or "$($_.Comment)".Trim() -eq $targetComment) {
+            $_.Deleted = $true
+            $Script:changesMade = $true
+        }
+    }
+    
 }
 
 
@@ -209,5 +224,9 @@ if ($add.IsPresent) {
     AddEntry $HostName $IPAddress $ReplaceIfExists.IsPresent $Comment
 }
 
-WriteHostsFile $hosts
+if ($remove.IsPresent) {
+    RemoveEntry $HostName $IPAddress $Comment
+}
 
+WriteHostsFile $hosts
+$true
