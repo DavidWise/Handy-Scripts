@@ -35,3 +35,23 @@ The result is shown as a simple table but the actual results are proper objects 
 
 Writes out the entire ```hosts``` file, including comments.  If with ```-full``` the output is simple strings
 
+## Adding an Entry
+
+```
+.\hosts.ps1 -add [-hostname] yourname [-IPAddress yourIP] [-Comment "your comment"]
+
+```
+
+Adds an entry to the hosts file using the host name provided.  If no IP Address is provided, it will default to 127.0.0.1 (localhost).  You can also include a comment such as "added by AwesomeBuilder Uber Extreme 99.0" so that anyone looking at the hosts file will know why that entry is there
+
+Both IPAddress and Comment are optional
+
+## Removing an entry
+```
+.\hosts.ps1 -remove [-hostname] yourname [-IPAddress yourIP] [-Comment "your comment"]
+
+```
+
+this will remove all entries in the host file that match any of the values passed, including the comment so that batch scripts can better group their Adds and Removes.
+
+**Caution**: *be very careful removing via IP Address as you can possibly clear out entries that you did not intend to remove simply because they point to the same IPAddress*
