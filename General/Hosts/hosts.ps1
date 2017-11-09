@@ -145,13 +145,24 @@ function AddEntry([string]$newHost, [string] $newIP, [bool] $replace, [string] $
     $Script:changesMade = $true
 }
 
+
+function MatchesValue([string] $value1, [string] $value2) {
+    $val1 = "$value1".Trim()
+    $val2 = "$value2".Trim()
+
+    # both items must have a value in order to be evaluated
+    if ([string]::IsNullOrEmpty($val1) -or [string]::IsNullOrEmpty($val2)) { return $false }
+
+    return ($val1 -eq $val2)
+}
+
+
 function RemoveEntry([string]$oldHost, [string] $oldIP, [string] $oldComment) {
-    $targetIP = "$oldIP".Trim()
-    $targetName = "$oldHost".Trim()
-    $targetComment = "$oldComment".Trim()
 
     $entries | % {
-        if ($_.Host -eq $targetName -or $_.Address -eq $targetIP -or "$($_.Comment)".Trim() -eq $targetComment) {
+        $isamatch = (MatchesValue $oldHost $_.Host) -or (MatchesValue $oldIP $_.Address) -or (MatchesValue $oldComment $_.Comment)
+
+        if ($isamatch)  {
             $_.Deleted = $true
             $Script:changesMade = $true
         }
