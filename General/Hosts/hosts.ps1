@@ -18,10 +18,12 @@ if present, it will list the mappings defined in the hosts file.  This is the de
 Writes out the entirety of the local hosts file
 
 .PARAMETER add
-Initiates the adding of an entry to the local hosts file.  If the entry exists, it will not be overwritten unless -ReplaceIfExists is also specified
+Initiates the adding of an entry to the local hosts file.  If no -IPAddress is specified, it will assumoe 127.0.0.1 (localhost)
+If the entry exists, it will not be overwritten unless -ReplaceIfExists is also specified
 
 .PARAMETER remove
-Removes an item from the hosts file.  If -HostName is used, it will find that as a match, if -IPAddress is used it will use that.  No error is thrown if the desired item is not found
+Removes an item from the hosts file.  Requires that -HostName, -IPAddress or -Comment be specified and will match on what is passed on the included parameter
+No error is thrown if the desired item is not found
 
 .PARAMETER HostName
 The DNS host name to be included in the action. This is the default first parameter for -Add and -Remove
@@ -46,7 +48,7 @@ param (
     [Parameter(ParameterSetName=’listHosts’)]
     [switch] $list,
 
-    [Parameter(ParameterSetName=’listHosts’)]
+    [Parameter(ParameterSetName=’showHosts’)]
     [switch] $full,
 
     [Parameter(ParameterSetName=’addHosts’, Mandatory=$true)]
@@ -56,11 +58,9 @@ param (
     [switch] $remove,
 
     [Parameter(ParameterSetName=’addHosts’, Position=0)]
-    [Parameter(ParameterSetName=’removeHosts’, Position=0)]
     [string] $HostName,
 
     [Parameter(ParameterSetName=’addHosts’, Position=1)]
-    [Parameter(ParameterSetName=’removeHosts’, Position=1)]
     [string] $IPAddress,
 
     [Parameter(ParameterSetName=’addHosts’)]
