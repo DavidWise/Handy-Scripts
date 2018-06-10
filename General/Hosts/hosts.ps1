@@ -1,4 +1,9 @@
-﻿param (
+﻿[CmdletBinding(
+    DefaultParameterSetName="listHosts",
+    SupportsShouldProcess = $False
+
+)]
+param (
     [Parameter(ParameterSetName=’listHosts’)]
     [switch] $list,
 
@@ -27,9 +32,14 @@
     [string] $Comment
 )
 
+$psetName = $PSCmdlet.ParameterSetName
+
+$listHosts = ($list.IsPresent -or ($psetName -eq "listHosts" -and $list.IsPresent -eq $false))
+
 $hosts = "$($env:windir)\System32\drivers\etc\hosts"
 $changesMade = $false
 $entries = @()
+
 
 function IsAdministrator
 {  
@@ -107,7 +117,7 @@ function GetHostsFile([string] $hostsPath) {
 
 
 function ListEntries($entries) {
-    if ($list.IsPresent -eq $false) { return }
+    if ($listHosts -eq $false) { return }
     $entries | where {$_.IsEntry} | select Host, Address, Comment | sort Host
 }
 
@@ -214,12 +224,12 @@ function WriteHostsFile([string] $hostsPath) {
 
 if ($full.IsPresent) {
     Get-Content $hosts | Write-Output
-    exit
+    return
 }
 
 $entries = GetHostsFile $hosts
 
-if ($list.IsPresent) { 
+if ($listHosts -eq $true) { 
     ListEntries $entries 
     return
 }
@@ -240,4 +250,3 @@ if ($remove.IsPresent) {
 }
 
 WriteHostsFile $hosts
-$true
