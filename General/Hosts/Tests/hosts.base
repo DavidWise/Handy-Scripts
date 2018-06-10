@@ -1,0 +1,9 @@
+# Opening Header comments
+
+#and some other comments
+127.0.0.1    api.aalii.local
+12.1.13.17   aalii.local
+127.0.0.1    core57.com        # some comment #[Tag1,Delta]
+127.0.0.1    api.core57.com
+127.0.0.1    TagTest           #  #[Red,Blue,Orange]
+127.0.0.1    TagTest2          #  #[Blue,Orange]

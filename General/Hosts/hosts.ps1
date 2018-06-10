@@ -10,6 +10,8 @@ instead go to desired target machines, usually localhost (aka 127.0.0.1)
 
 This is intended to help web developers with API routing and such. Dont be evil
 
+The latest version of this file is available at: https://github.com/DavidWise/Handy-Scripts/tree/master/General/Hosts
+
 
 .PARAMETER list
 if present, it will list the mappings defined in the hosts file.  This is the default action if no arguments are included
@@ -34,8 +36,37 @@ The IP address to route the associated HostName to
 .PARAMETER Comment
 Any comment associated with the IP address, i.e. "Added by RobertsDP for the Iocane project"
 
+.PARAMETER Tags
+A comma-delimted list of tags to associate the entry with on -Add or to match against on -Remove.  
+For -Add, the entry is added with the tags specified.  If the entry already exists, any new tags are also added to the entry
+for -Remove, all tags specified must be on the item in order to match.  For Example, if the item include the tags RED,BLUE,WHITE and the -Remove specifies RED,GREEN the item would not be a match since the original tag list does not include both RED and GREEN
+
+.PARAMETER TagOpen
+Specifies the text indicator that identifies the start of a tag block in the comment.  Default is " #["
+using custom TagOpen and TagClose allows callers to specify unique tag blocks - use with caution
+
+.PARAMETER TagClose
+Specifies the text indicator that identifies the end of a tag block in the comment.  Default is "]"
+using custom TagOpen and TagClose allows callers to specify unique tag blocks - use with caution
+
 .PARAMETER ReplaceIfExists
 Used in associate with -Add to force the item to be written even if it already exists
+
+.PARAMETER TagMatchMode
+Determines the matching algorithm used when evaluating tags for removal
+- All - All tags passed in on the Remove Request must be present 
+- Any - Any of the tags passed in on the Remove Request must be present 
+- Exact - All the tags passed in must be the only tags defined on an item 
+- Blend - Behaves like -All- except that it only removes matched tags from the item.  If all tags are removed then the item is removed. 
+Blend is the default since it matches the default behavior of -Add and allows multiple tags to share the same host entry
+
+.NOTES
+Future Enhancements
+- Bulk import of actions via CSV or Pipeline
+- incorporate Tags into the -List logic
+
+TBD
+- Need more unit tests around reading and writing of the host file as well as verifying the changes
 
 #>
 [CmdletBinding(
@@ -68,7 +99,24 @@ param (
 
     [Parameter(ParameterSetName=’addHosts’)]
     [Parameter(ParameterSetName=’removeHosts’)]
-    [string] $Comment
+    [string] $Comment,
+
+    [Parameter(ParameterSetName=’addHosts’)]
+    [Parameter(ParameterSetName=’removeHosts’)]
+    [string] $Tags,
+
+    [Parameter(ParameterSetName=’addHosts’)]
+    [Parameter(ParameterSetName=’removeHosts’)]
+    [string] $TagOpen,
+
+    [Parameter(ParameterSetName=’addHosts’)]
+    [Parameter(ParameterSetName=’removeHosts’)]
+    [string] $TagClose,
+
+    [Parameter(ParameterSetName=’removeHosts’)]
+    [ValidateSet("Exact", "Any", "All", "Blend")]
+    
+    [string] $TagMatchMode = "Blend"
 )
 
 $psetName = $PSCmdlet.ParameterSetName
@@ -78,6 +126,14 @@ $listHosts = ($list.IsPresent -or ($psetName -eq "listHosts" -and $list.IsPresen
 $hosts = "$($env:windir)\System32\drivers\etc\hosts"
 $changesMade = $false
 $entries = @()
+
+$TagValues = $null
+
+$tagTokenPrefix = " #["
+$tagTokenSuffix = "]"
+
+if([string]::IsNullOrWhiteSpace($TagOpen) -eq $false) {$tagTokenPrefix = $TagOpen }
+if([string]::IsNullOrWhiteSpace($TagClose) -eq $false) {$tagTokenSuffix = $TagClose }
 
 
 function IsAdministrator
@@ -93,7 +149,6 @@ function ExitWithMessage([int] $exitCode, [ConsoleColor] $ForegroundColor, [stri
 
     write-host $newMsg -ForegroundColor $ForegroundColor
     #$host.SetShouldExit($exitCode)
-    $false
     exit $exitCode
 }
 
@@ -109,12 +164,133 @@ function NewEntry() {
     $obj | Add-Member -MemberType NoteProperty -Name "Deleted" -Value $false
     $obj | Add-Member -MemberType NoteProperty -Name "Added" -Value $false
     $obj | Add-Member -MemberType NoteProperty -Name "LineNumber" -Value -1
+    $obj | Add-Member -MemberType NoteProperty -Name "TagValues" -Value $null
+    $obj | Add-Member -MemberType NoteProperty -Name "Tags" -Value ""
     
     $obj
 }
 
 
-function GetHostsFile([string] $hostsPath) {
+function ParseTag([string] $value) {
+    $result = $null
+
+    if ([string]::IsNullOrWhiteSpace($value) -eq $false) {
+        $inTags = $value.Split(@(',', ' ','#'), [System.StringSplitOptions]::RemoveEmptyEntries)
+
+        $result = $inTags | % { $_ }
+    }
+
+    $result
+}
+
+
+function GetTagBlock([string] $value) {
+    # requires that the tags be in the " #[Tag1,Tag2]" format
+    $result = ""
+
+    if ([string]::IsNullOrWhiteSpace($value) -eq $false) {
+        $startPos = $value.IndexOf($tagTokenPrefix)
+
+        if ($startPos -ge 0) {
+            $chunk = $value.Substring($startPos)
+
+            $endPos = $chunk.IndexOf($tagTokenSuffix)
+            if ($endPos -gt 0) { 
+                $chunk = $chunk.Substring(0,$endpos+1)
+                $result = $chunk
+            }
+        }
+    }
+
+    $result
+}
+
+
+function ParseTagFromComment([string] $value) {
+    # requires that the tags be in the " #[Tag1,Tag2]" format
+    $result = $null
+
+    $tagBlock = GetTagBlock $value
+
+    if ([string]::IsNullOrWhiteSpace($tagBlock) -eq $false) {
+        $chunk = $tagBlock.SubString($tagTokenPrefix.Length)
+
+        $endPos = $chunk.IndexOf($tagTokenSuffix)
+        if ($endPos -gt 0) { 
+            $chunk = $chunk.Substring(0,$endpos)
+            $result = ParseTag $chunk
+        }
+    }
+
+    $result
+}
+
+
+function RemoveTagFromComment([string] $value) {
+    $result = ""
+    if ([string]::IsNullOrWhiteSpace($value) -eq $false) {
+        $tagBlock = GetTagBlock $value
+        if ([string]::IsNullOrWhiteSpace($tagBlock) -eq $false) {
+            $result = $value.Replace($tagBlock, "")
+        }
+    }
+
+    $result
+}
+
+
+
+function BuildTags([object[]] $values) {
+    $result = ""
+
+    if ($values -ne $null -and $values.Length -gt 0) {
+        $vals = [string[]] $values
+        $result = [string]::Join(",", $vals)
+    }
+    $result
+}
+
+
+function IsEmpty([object[]] $values) {
+    if ($values -eq $null) { return $true }
+    if ($values.Length -lt 1) { return $true }
+    return $false
+}
+
+
+function AddToTags([object[]] $oldValues, [object[]] $newValues) {
+    #simple and most common cases first
+
+    #nothing in either
+    if ((IsEmpty $newValues) -and (IsEmpty $oldValues)) { return $null }
+
+    #nothing new to add
+    if (IsEmpty $newValues) { return $oldValues }
+
+    # no old data so return just the new
+    if (IsEmpty $oldValues) { return $newValues }
+
+    #some merge has to happen
+    $result = $oldValues
+    if ($result -eq $null) {$result = @()}
+
+    $newValues | % {
+        $newVal = [string] $_
+        $doAdd = $true
+
+        $result | % { 
+            $oldVal = [string] $_
+            if ($oldVal -eq $newval) {$doAdd = $false }
+        }
+
+        if ($doAdd) { $result += $newVal }
+    }
+
+    $result
+}
+
+
+function ParseHostsFile([string] $hostsPath) {
     $hostfile = Get-Content $hosts
     $lineNumber = 0
 
@@ -136,6 +312,11 @@ function GetHostsFile([string] $hostsPath) {
             } else {
                 $line = $line.Substring(0, $commentPos).Trim();
             }
+
+            $obj.TagValues = ParseTagFromComment $obj.Comment
+            $obj.Tags = BuildTags $obj.TagValues
+
+            $obj.Comment = RemoveTagFromComment $obj.Comment
         }
 
 
@@ -155,9 +336,64 @@ function GetHostsFile([string] $hostsPath) {
 
 
 
+function MatchesTags([string]$matchMode, [object[]] $currentTags, [object[]] $compareTags) {
+    #if both are empty, its a match regardless of the mode
+    if ((IsEmpty $currentTags) -and (IsEmpty $compareTags)) { return $true }
+
+    # if there are no current tags then obviously none of the new ones will match
+    if ((IsEmpty $currentTags) -and (-not (IsEmpty $compareTags))) { return $false }
+
+    # if there are current tags but no new ones then it doesnt match
+    if ((-not (IsEmpty $currentTags)) -and (IsEmpty $compareTags)) { return $false }
+
+    $matchCount = 0
+    #loop through
+    $compareTags | % {
+        $newTag = [string] $_
+
+        $currentTags | % {
+            $oldTag = [string] $_
+
+            if ($oldTag -eq $newTag) { $matchCount++ }
+        }
+    }
+
+    if ($matchMode -eq "All" -and $matchCount -eq $compareTags.Length) { return $true }
+    if ($matchMode -eq "Any" -and $matchCount -gt 0) { return $true }
+    if ($matchMode -eq "Exact" -and $matchCount -eq $compareTags.Length -and $matchCount -eq $currentTags.Length) { return $true }
+    if ($matchMode -eq "Blend" -and $matchCount -eq $compareTags.Length) { return $true }
+
+    $false
+}
+
+
+
+function StripMatchingTags([object[]] $currentTags, [object[]] $compareTags) {
+    if (IsEmpty $currentTags -and IsEmpty $compareTags) { return $null }
+    if (IsEmpty $currentTags) { return $null }
+    if (IsEmpty $compareTags) { return $currentTags }
+
+    $newTags = @()
+    $currentTags | % {
+        $oldTag = [string] $_
+        $matches = $false
+
+        $compareTags | % {
+            $newTag = [string] $_
+            if ($oldTag -eq $newTag) {$matches = $true}
+        }
+
+        if (-not $matches) { $newTags += $oldTag }
+    }
+
+    $newTags
+}
+
+
+
 function ListEntries($entries) {
     if ($listHosts -eq $false) { return }
-    $entries | where {$_.IsEntry} | select Host, Address, Comment | sort Host
+    $entries | where {$_.IsEntry} | select Host, Address, Comment, Tags | sort Host
 }
 
 
@@ -178,7 +414,6 @@ function AddEntry([string]$newHost, [string] $newIP, [bool] $replace, [string] $
 
     if ($addEntry -eq $null) {
         $addEntry = newEntry
-        #$script:entries.Add($addEntry)
         $script:entries += $addEntry
     }
 
@@ -190,6 +425,7 @@ function AddEntry([string]$newHost, [string] $newIP, [bool] $replace, [string] $
     $addEntry.Address = $targetIP
     $addEntry.Added = $true
     $addEntry.IsEntry = $true
+    $addEntry.TagValues = AddToTags $addEntry.TagValues $TagValues
 
     $Script:changesMade = $true
 }
@@ -210,6 +446,23 @@ function RemoveEntry([string]$oldHost, [string] $oldIP, [string] $oldComment) {
 
     $entries | % {
         $isamatch = (MatchesValue $oldHost $_.Host) -or (MatchesValue $oldIP $_.Address) -or (MatchesValue $oldComment $_.Comment)
+
+        # look at tags if we need to
+        if (-not $isamatch -and -not (IsEmpty $TagValues)) {
+            $tagMatches = MatchesTags $TagMatchMode $_.TagValues $TagValues
+
+            if ($tagMatches) {
+                if ($TagMatchMode -ne "Blend") { $isamatch = $true }
+                else {
+                    $_.TagValues = StripMatchingTags $_.TagValues $TagValues
+
+                    if (-not (IsEmpty $_.TagValues)) { $Script:changesMade = $true }
+                    else {
+                        $isamatch = $true 
+                    }
+                }
+            }
+        }
 
         if ($isamatch)  {
             $_.Deleted = $true
@@ -237,10 +490,19 @@ function WriteHostsFile([string] $hostsPath) {
 
     $outEntries | % {
         $_.OutputValue = $_.OriginalValue
+        $outTag = ""
         $outComment = ""
         if ([string]::IsNullOrWhiteSpace($_.Comment) -eq $false) { $outComment = "#" + $_.Comment }
+
+        $tagVals = BuildTags $_.TagValues
+        if (-not [string]::IsNullOrWhiteSpace($tagVals)) {
+            $outTag = "$($tagTokenPrefix)$($tagVals)$($tagTokenSuffix)"
+            # if only a tag was listed, make sure there is a comment indicator first
+            if ($outComment -eq "") { $outComment = "# " }
+        }
+
         if ($_.IsEntry -eq $true) {
-            $_.OutputValue = [string]::Format("{0, -" + $maxIPLen.ToString() + "} {1, -" + $maxHostLen.ToString() + "} {2}", $_.Address, $_.Host, $outComment).trim()
+            $_.OutputValue = [string]::Format("{0, -" + $maxIPLen.ToString() + "} {1, -" + $maxHostLen.ToString() + "} {2}{3}", $_.Address, $_.Host, $outComment, $outTag).trim()
         }
     }
 
@@ -249,7 +511,7 @@ function WriteHostsFile([string] $hostsPath) {
 
     $info = New-Object System.IO.FileInfo($hostsPath)
 
-    $backupFileName = [string]::Format("hosts_{0:yyyyMMddHHmmss}", [DateTime]::Now)
+    $backupFileName = [string]::Format("hosts_bk_{0:yyyyMMddHHmmss}", [DateTime]::Now)
 
     $bakfile = [System.IO.Path]::Combine($info.DirectoryName, $backupFileName)
 
@@ -266,12 +528,15 @@ if ($full.IsPresent) {
     return
 }
 
-$entries = GetHostsFile $hosts
+$TagValues = ParseTag $Tags
+
+$entries = ParseHostsFile $hosts
 
 if ($listHosts -eq $true) { 
     ListEntries $entries 
     return
 }
+
 
 $isAdmin = IsAdministrator
 
