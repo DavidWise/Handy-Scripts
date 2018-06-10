@@ -1,6 +1,45 @@
-﻿[CmdletBinding(
+﻿<#
+.SYNOPSIS 
+Performs basic operations related to managing the local 'hosts' file (List, Add, Remove).  By default, the hosts file is located in %WINDIR%/System32/drivers/etc and has no extension
+
+.DESCRIPTION
+Allows the caller to easily manipulate the local hosts file either directly or via scripts or batch commands.  
+
+The local hosts is (usually) the first place the machine looks to determine where a host is located.  Adding entries here allows redirecting of otherwise public URLs to
+instead go to desired target machines, usually localhost (aka 127.0.0.1)
+
+This is intended to help web developers with API routing and such. Dont be evil
+
+
+.PARAMETER list
+if present, it will list the mappings defined in the hosts file.  This is the default action if no arguments are included
+
+.PARAMETER full
+Writes out the entirety of the local hosts file
+
+.PARAMETER add
+Initiates the adding of an entry to the local hosts file.  If the entry exists, it will not be overwritten unless -ReplaceIfExists is also specified
+
+.PARAMETER remove
+Removes an item from the hosts file.  If -HostName is used, it will find that as a match, if -IPAddress is used it will use that.  No error is thrown if the desired item is not found
+
+.PARAMETER HostName
+The DNS host name to be included in the action. This is the default first parameter for -Add and -Remove
+
+.PARAMETER IPAddress
+The IP address to route the associated HostName to
+
+.PARAMETER Comment
+Any comment associated with the IP address, i.e. "Added by RobertsDP for the Iocane project"
+
+.PARAMETER ReplaceIfExists
+Used in associate with -Add to force the item to be written even if it already exists
+
+#>
+[CmdletBinding(
     DefaultParameterSetName="listHosts",
-    SupportsShouldProcess = $False
+    SupportsShouldProcess = $False,
+    SupportsPaging = $False
 
 )]
 param (
@@ -10,10 +49,10 @@ param (
     [Parameter(ParameterSetName=’listHosts’)]
     [switch] $full,
 
-    [Parameter(ParameterSetName=’addHosts’)]
+    [Parameter(ParameterSetName=’addHosts’, Mandatory=$true)]
     [switch] $add,
 
-    [Parameter(ParameterSetName=’removeHosts’)]
+    [Parameter(ParameterSetName=’removeHosts’, Mandatory=$true)]
     [switch] $remove,
 
     [Parameter(ParameterSetName=’addHosts’, Position=0)]
