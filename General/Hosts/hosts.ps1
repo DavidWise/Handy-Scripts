@@ -33,6 +33,9 @@ The DNS host name to be included in the action. This is the default first parame
 .PARAMETER IPAddress
 The IP address to route the associated HostName to
 
+.PARAMETER BlockDomain
+The domain will be added to the hosts file with an IP address of 0.0.0.0, effectively blocking all requests to that domain
+
 .PARAMETER Comment
 Any comment associated with the IP address, i.e. "Added by RobertsDP for the Iocane project"
 
@@ -89,6 +92,7 @@ param (
     [switch] $remove,
 
     [Parameter(ParameterSetName=’addHosts’, Position=0)]
+    [Parameter(ParameterSetName=’removeHosts’, Position=0)]
     [string] $HostName,
 
     [Parameter(ParameterSetName=’addHosts’, Position=1)]
@@ -96,6 +100,9 @@ param (
 
     [Parameter(ParameterSetName=’addHosts’)]
     [switch] $ReplaceIfExists,
+
+    [Parameter(ParameterSetName=’addHosts’)]
+    [switch] $BlockDomain,
 
     [Parameter(ParameterSetName=’addHosts’)]
     [Parameter(ParameterSetName=’removeHosts’)]
@@ -397,10 +404,11 @@ function ListEntries($entries) {
 }
 
 
-function AddEntry([string]$newHost, [string] $newIP, [bool] $replace, [string] $addComment) {
+function AddEntry([string]$newHost, [string] $newIP, [bool] $replace, [string] $addComment, [bool] $block) {
     $targetIP = "$newIP".Trim()
     $targetHost = "$newHost".Trim()
     if ([string]::IsNullOrWhiteSpace($targetIP)) { $targetIP = "127.0.0.1" }
+    if ($block) { $targetIP = "0.0.0.0" }
 
     if ([string]::IsNullOrWhiteSpace($targetHost)) { 
         ExitWithMessage 1 -foreColor Red "a host name is required"
@@ -546,7 +554,7 @@ if (($add.IsPresent -or $remove.IsPresent) -and $isAdmin -eq $false) {
 }
 
 if ($add.IsPresent) {
-    AddEntry $HostName $IPAddress $ReplaceIfExists.IsPresent $Comment
+    AddEntry $HostName $IPAddress $ReplaceIfExists.IsPresent $Comment $BlockDomain.IsPresent
 }
 
 if ($remove.IsPresent) {
