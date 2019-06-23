@@ -1,0 +1,10 @@
+Name,Path,Description
+"Hosts","..\Hosts\hosts.ps1","hosts defined by dev"
+"PathTo",".\PathTo.ps1","finds where a given file exists in the defined PATH entries"
+"KDiff3","C:\Program Files\KDiff3\kdiff3.exe","Open Source DIFF tool"
+"np","C:\Program Files\Notepad++\Notepad++.exe",""
+"ngen","C:\windows\Microsoft.NET\Framework\v4.0.30319\ngen.exe"
+"ngen64","C:\windows\Microsoft.NET\Framework64\v4.0.30319\ngen.exe"
+"gitsh","C:\dev\bin\dwgitsh\Start-GitShell.ps1"
+"ed","C:\Program Files\Notepad++\notepad++.exe"
+"npp","C:\Program Files\Notepad++\notepad++.exe"
