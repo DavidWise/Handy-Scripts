@@ -1,11 +1,28 @@
 ﻿#using Pester for testing - https://github.com/pester/Pester
 
-$here = (Split-Path -Parent $MyInvocation.MyCommand.Path)
-. $here\hosts.ps1
+function Clean {
 
+}
+
+# ./deploy/Clean.Tests.ps1
+
+$here = Split-Path -Parent $MyInvocation.MyCommand.Path
+$sut = (Split-Path -Leaf $MyInvocation.MyCommand.Path) -replace '\.Tests\.', '.'
+. "$here\$sut"
+
+$Global:testDataFolder = Join-Path $here "Tests"
 $TestTagBlock = "$($tagTokenPrefix)Tag1,Tag2,Tag3$($tagTokenSuffix)"
 $ExpectedTagBlock = @("Tag1", "Tag2", "Tag3")
 
+
+function GetHostEntryTestData([string] $testDataFileName) {
+    $hostsData = join-path $testDataFolder $testDataFileName
+    if ((Test-Path $hostsData) -eq $true) {
+        return ParseHostsFile $hostsData
+    }
+}
+
+$Global:testDataHostsBase = GetHostEntryTestData "Hosts.Base"
 
 Context 'GetTagBlock' {
     It "Given <Given> returns <Expected>" -TestCases @(
@@ -178,6 +195,80 @@ Context 'StripMatchingTags' {
         $val | should -be $Expected
     }
 }
+
+
+Describe "GetTagCompareMode" {
+    Context "Valid Values" {
+        It "Given <Given> returns <Expected>" -TestCases @(
+            @{Given = "Exact"; Expected = "Exact"}
+            @{Given = "Any"; Expected = "Any"}
+            @{Given = "All"; Expected = "All"}
+            @{Given = "Blend"; Expected = "Blend"}
+        ) {
+            param($Given, $Expected) 
+
+            $result = GetTagCompareMode $Given
+            $result | Should -be $Expected
+        }
+    }
+
+    Context "default Values" {
+        It "Given <Given> returns <Expected>" -TestCases @(
+            @{Given = ""; Expected = "Blend"}
+            @{Given = " "; Expected = "Blend"}
+            @{Given = "`r`n"; Expected = "Blend"}
+            @{Given = " `r`n "; Expected = "Blend"}
+            @{Given = $null; Expected = "Blend"}
+        ) {
+            param($Given, $Expected) 
+
+            $result = GetTagCompareMode $Given
+            $result | Should -be $Expected
+        }
+    }
+
+    Context "Bad values throw exception" {
+        It "Given <Given> an exception is thrown" -TestCases @(
+            @{Given="Junk"}
+            @{Given="asdasda s"}
+            @{Given="1"}
+            @{Given="ALL "}
+            @{Given=" ALL"}
+            @{Given=" ALL "}
+        ) {
+            $workedAsExpected = $false
+            try {
+                $result = GetTagCompareMode $Given
+            } catch {
+                $workedAsExpected = $true
+            }
+
+            $workedAsExpected | Should -BeTrue
+        }
+    }
+}
+
+
+Describe "ListEntries" {
+    Context 'No Tag Filters' {
+        It "All Entries shown"  {
+            $result = ListEntries $Global:testDataHostsBase
+
+            ($result.length) | Should -be 6
+        }
+    }
+
+    Context 'Tag default returns expected matches' {
+        It "All Entries shown"  {
+            $result = ListEntries $Global:testDataHostsBase @("Blue", "Orange") "Any"
+
+            $result | Should -Not -Be $null
+            ($result.length) | Should -be 2
+        }
+    }
+
+}
+
 
 
 
