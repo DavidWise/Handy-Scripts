@@ -55,3 +55,10 @@ Both IPAddress and Comment are optional
 this will remove all entries in the host file that match any of the values passed, including the comment so that batch scripts can better group their Adds and Removes.
 
 **Caution**: *be very careful removing via IP Address as you can possibly clear out entries that you did not intend to remove simply because they point to the same IPAddress*
+
+# future enhancements
+- built-in filtering
+- tag maintenance (add/remove tags only, not entries)
+- ability to specify an input path instead of defaulting to the system hosts file
+- ability to specify an output path instead of defaulting to the system hosts file
+- more comprehensive unit tests

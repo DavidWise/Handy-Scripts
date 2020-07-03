@@ -160,7 +160,7 @@ $sourceFile = GetInputFilePath
 $destinationFile = GetOutputFilePath
 
 
-DisplaySpash
+DisplaySpash $version.IsPresent
 
 
 if ($full.IsPresent) {
@@ -170,6 +170,7 @@ if ($full.IsPresent) {
 
 SetTagPrefix $TagOpen
 SetTagSuffix $TagClose
+SetTagCompareMode $TagMatchMode
 
 $TagValues = ParseTag $Tags
 
@@ -177,11 +178,11 @@ $hostEntries = ParseHostsFile $sourceFile
 
 if ($listHosts -eq $true) { 
     ListEntries $hostEntries $TagValues
-    return
+    exit 0
 }
 
 
-function TryElevatedTasks($originalEntries) {
+function TryElevatedTasks($originalEntries, $newTags) {
     $isAdmin = IsAdministrator
 
     $revisedEntries = $originalEntries
@@ -192,14 +193,14 @@ function TryElevatedTasks($originalEntries) {
     }
 
     if ($add.IsPresent) {
-        $revisedEntries = AddEntry $revisedEntries $HostName $IPAddress $ReplaceIfExists.IsPresent $Comment $BlockDomain.IsPresent $TagValues
+        $revisedEntries = AddEntry $revisedEntries $HostName $IPAddress $ReplaceIfExists.IsPresent $Comment $BlockDomain.IsPresent $newTags
     }
 
     if ($remove.IsPresent) {
-        $revisedEntries = RemoveEntry $revisedEntries $HostName $IPAddress $Comment $TagValues
+        $revisedEntries = RemoveEntry $revisedEntries $HostName $IPAddress $Comment $newTags
     }
 
     WriteHostsFile $revisedEntries $destinationFile
 }
 
-TryElevatedTasks $hostEntries
+TryElevatedTasks $hostEntries $TagValues

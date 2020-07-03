@@ -1,6 +1,11 @@
-﻿$tagTokenPrefix = " #["
-$tagTokenSuffix = "]"
-$changesMade = $false
+﻿
+$hostLibSettings = @{
+    TagTokenPrefix = " #[";
+    TagTokenSuffix = "]";
+    TagCompareMode = "Blend";
+    ChangesMade = $false;
+    ValidCompareModes = @("Exact", "Any", "All", "Blend");
+}
 
 
 function IsAdministrator
@@ -20,13 +25,44 @@ function ExitWithMessage([int] $exitCode, [ConsoleColor] $ForegroundColor, [stri
 }
 
 function SetTagPrefix([string] $value) {
-    if (-not [string]::IsNullOrWhiteSpace($value)) { $script:tagTokenPrefix = $value }
+    if (-not [string]::IsNullOrWhiteSpace($value)) { $script:hostLibSettings.TagTokenPrefix = $value }
 }
 
 function SetTagSuffix([string] $value) {
-    if (-not [string]::IsNullOrWhiteSpace($value)) { $script:tagTokenSuffix = $value }
+    if (-not [string]::IsNullOrWhiteSpace($value)) { $script:hostLibSettings.TagTokenSuffix = $value }
 }
 
+function IsValidTagCompareMode([string] $newMode) {
+    $resultMode = $hostLibSettings.ValidCompareModes | where {$_ -eq $newMode}
+
+    return ($resultMode -ne $null)
+}
+
+
+function GetTagCompareMode([string] $newMode) {
+    $result = $hostLibSettings.TagCompareMode
+
+    if ([string]::IsNullOrWhiteSpace($newMode) -eq $false) {
+        if (IsValidTagCompareMode $newMode) {
+            $result = $newMode
+        } else {
+            throw "Unsupported tag compare mode of '$newMode'"
+        }
+    }
+    
+    $result
+}
+
+
+function SetTagCompareMode([string] $newMode) {
+    if ([string]::IsNullOrWhiteSpace($newMode)) { return }
+
+    if ((IsValidTagCompareMode $newMode) -eq $false) {
+        throw "Unsupported tag compare mode of '$newMode'"
+    }
+
+    $Script:hostLibSettings.TagCompareMode = $newMode
+}
 
 
 function NewEntry() {
@@ -44,30 +80,6 @@ function NewEntry() {
     $obj | Add-Member -MemberType NoteProperty -Name "Tags" -Value ""
     
     $obj
-}
-
-
-function GetTagCompareMode([string] $newMode, [string] $defaultMode) {
-    $validCompareModes = @("Exact", "Any", "All", "Blend")
-    $result = $defaultMode
-    if ([string]::IsNullOrWhiteSpace($result)) { $result = $TagMatchMode }
-    
-
-    if (-not [string]::IsNullOrWhiteSpace($newMode)) { $result = $newMode }
-
-
-    if ([string]::IsNullOrWhiteSpace($result)) { $result = "Blend" }
-
-    $resultMode = $validCompareModes | % {
-        if ($_ -eq $result) { $_ }
-    }
-
-    if ($resultMode -eq $null) {
-        throw "Unexpected tag compare mode of '$resultMode'"
-    }
-
-    
-    $resultMode
 }
 
 
@@ -89,12 +101,12 @@ function GetTagBlock([string] $value) {
     $result = ""
 
     if ([string]::IsNullOrWhiteSpace($value) -eq $false) {
-        $startPos = $value.IndexOf($tagTokenPrefix)
+        $startPos = $value.IndexOf($hostLibSettings.TagTokenPrefix)
 
         if ($startPos -ge 0) {
             $chunk = $value.Substring($startPos)
 
-            $endPos = $chunk.IndexOf($tagTokenSuffix)
+            $endPos = $chunk.IndexOf($hostLibSettings.TagTokenSuffix)
             if ($endPos -gt 0) { 
                 $chunk = $chunk.Substring(0,$endpos+1)
                 $result = $chunk
@@ -113,9 +125,9 @@ function ParseTagFromComment([string] $value) {
     $tagBlock = GetTagBlock $value
 
     if ([string]::IsNullOrWhiteSpace($tagBlock) -eq $false) {
-        $chunk = $tagBlock.SubString($tagTokenPrefix.Length)
+        $chunk = $tagBlock.SubString($hostLibSettings.TagTokenPrefix.Length)
 
-        $endPos = $chunk.IndexOf($tagTokenSuffix)
+        $endPos = $chunk.IndexOf($hostLibSettings.TagTokenSuffix)
         if ($endPos -gt 0) { 
             $chunk = $chunk.Substring(0,$endpos)
             $result = ParseTag $chunk
@@ -336,7 +348,7 @@ function AddEntry($originalEntries, [string]$newHost, [string] $newIP, [bool] $r
     $addEntry.IsEntry = $true
     $addEntry.TagValues = AddToTags $addEntry.TagValues $newTags
 
-    $Script:changesMade = $true
+    $Script:hostLibSettings.ChangesMade = $true
     $result
 }
 
@@ -358,14 +370,14 @@ function RemoveEntry($originalEntries, [string]$oldHost, [string] $oldIP, [strin
 
         # look at tags if we need to
         if (-not $isamatch -and -not (IsEmpty $findTagValues)) {
-            $tagMatches = MatchesTags $TagMatchMode $_.TagValues $findTagValues
+            $tagMatches = MatchesTags $hostLibSettings.TagCompareMode $_.TagValues $findTagValues
 
             if ($tagMatches) {
-                if ($TagMatchMode -ne "Blend") { $isamatch = $true }
+                if ($hostLibSettings.TagCompareMode -ne "Blend") { $isamatch = $true }
                 else {
                     $_.TagValues = StripMatchingTags $_.TagValues $findTagValues
 
-                    if (-not (IsEmpty $_.TagValues)) { $Script:changesMade = $true }
+                    if (-not (IsEmpty $_.TagValues)) { $Script:hostLibSettings.ChangesMade = $true }
                     else {
                         $isamatch = $true 
                     }
@@ -375,7 +387,7 @@ function RemoveEntry($originalEntries, [string]$oldHost, [string] $oldIP, [strin
 
         if ($isamatch)  {
             $_.Deleted = $true
-            $Script:changesMade = $true
+            $Script:hostLibSettings.ChangesMade = $true
         }
     }
     $result
@@ -383,7 +395,7 @@ function RemoveEntry($originalEntries, [string]$oldHost, [string] $oldIP, [strin
 
 
 function WriteHostsFile($originalEntries, [string] $hostsPath) {
-    if ($changesMade -eq $false) { return }
+    if ($hostLibSettings.ChangesMade -eq $false) { return }
 
     $outEntries = $originalEntries | where {$_.Deleted -ne $true }
 
@@ -405,7 +417,7 @@ function WriteHostsFile($originalEntries, [string] $hostsPath) {
 
         $tagVals = BuildTags $_.TagValues
         if (-not [string]::IsNullOrWhiteSpace($tagVals)) {
-            $outTag = "$($tagTokenPrefix)$($tagVals)$($tagTokenSuffix)"
+            $outTag = "$($hostLibSettings.TagTokenPrefix)$($tagVals)$($hostLibSettings.TagTokenSuffix)"
             # if only a tag was listed, make sure there is a comment indicator first
             if ($outComment -eq "") { $outComment = "# " }
         }
@@ -432,8 +444,8 @@ function WriteHostsFile($originalEntries, [string] $hostsPath) {
 }
 
 
-function DisplaySpash() {
-    if ($version.IsPresent -eq $false -and $env:HostsSplashDisplayed -eq "Y") { return }
+function DisplaySpash([bool] $spashRequested) {
+    if ($spashRequested -eq $false -and $env:HostsSplashDisplayed -eq "Y") { return }
     $verFile = Join-Path $PSScriptRoot "version"
     $ver = ""
     if ((Test-Path $verFile) -eq $true) { $ver = "v$((get-content $verFile).Trim())" }

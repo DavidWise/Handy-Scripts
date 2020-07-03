@@ -1,17 +1,14 @@
 ﻿#using Pester for testing - https://github.com/pester/Pester
 
-function Clean {
 
-}
-
-# ./deploy/Clean.Tests.ps1
-
-$here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$sut = (Split-Path -Leaf $MyInvocation.MyCommand.Path) -replace '\.Tests\.', '.'
-. "$here\$sut"
+$testCmd = get-item $PSCommandPath
+$here = $testCmd.DirectoryName
+$sut = $testCmd.Name -replace '\.Tests\.', '.'
+$fullPath = Join-Path $here $sut
+. "$fullPath"
 
 $Global:testDataFolder = Join-Path $here "Tests"
-$TestTagBlock = "$($tagTokenPrefix)Tag1,Tag2,Tag3$($tagTokenSuffix)"
+$TestTagBlock = "$($hostLibSettings.TagTokenPrefix)Tag1,Tag2,Tag3$($hostLibSettings.TagTokenSuffix)"
 $ExpectedTagBlock = @("Tag1", "Tag2", "Tag3")
 
 
@@ -34,7 +31,7 @@ Context 'GetTagBlock' {
         @{Given = "Ends with $TestTagBlock"; Expected = $TestTagBlock}
         @{Given = "$TestTagBlock at the start"; Expected = $TestTagBlock}
         @{Given = "Has a $TestTagBlock In the middle"; Expected = $TestTagBlock}
-        @{Given = "Has a $tagTokenPrefix In the middle but no end"; Expected = ""}
+        @{Given = "Has a $($hostLibSettings.tagTokenPrefix) In the middle but no end"; Expected = ""}
         
     ) {
         param($Given, $Expected)
