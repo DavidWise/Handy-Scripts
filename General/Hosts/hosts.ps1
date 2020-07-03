@@ -63,6 +63,9 @@ Determines the matching algorithm used when evaluating tags for removal
 - Blend - Behaves like -All- except that it only removes matched tags from the item.  If all tags are removed then the item is removed. 
 Blend is the default since it matches the default behavior of -Add and allows multiple tags to share the same host entry
 
+.PARAMETER Version
+Forces the script to display the version information
+
 .NOTES
 Future Enhancements
 - Bulk import of actions via CSV or Pipeline
@@ -82,6 +85,7 @@ param (
     [Parameter(ParameterSetName=’listHosts’)]
     [switch] $list,
 
+    [Alias("raw")]
     [Parameter(ParameterSetName=’showHosts’)]
     [switch] $full,
 
@@ -110,6 +114,8 @@ param (
 
     [Parameter(ParameterSetName=’addHosts’)]
     [Parameter(ParameterSetName=’removeHosts’)]
+    [Parameter(ParameterSetName=’listHosts’)]
+    [Alias("tag")]
     [string] $Tags,
 
     [Parameter(ParameterSetName=’addHosts’)]
@@ -121,9 +127,12 @@ param (
     [string] $TagClose,
 
     [Parameter(ParameterSetName=’removeHosts’)]
+    [Parameter(ParameterSetName=’listHosts’)]
     [ValidateSet("Exact", "Any", "All", "Blend")]
-    
-    [string] $TagMatchMode = "Blend"
+    [string] $TagMatchMode = "Blend",
+
+    [Alias("v","ver")]
+    [switch] $version
 )
 
 $psetName = $PSCmdlet.ParameterSetName
@@ -182,7 +191,7 @@ function ParseTag([string] $value) {
     $result = $null
 
     if ([string]::IsNullOrWhiteSpace($value) -eq $false) {
-        $inTags = $value.Split(@(',', ' ','#'), [System.StringSplitOptions]::RemoveEmptyEntries)
+        $inTags = $value.Split(@(',', ' ','#', ';'), [System.StringSplitOptions]::RemoveEmptyEntries)
 
         $result = $inTags | % { $_ }
     }
@@ -398,9 +407,11 @@ function StripMatchingTags([object[]] $currentTags, [object[]] $compareTags) {
 
 
 
-function ListEntries($entries) {
+function ListEntries($entries, $requestedTags) {
     if ($listHosts -eq $false) { return }
-    $entries | where {$_.IsEntry} | select Host, Address, Comment, Tags | sort Host
+    $matched = $entries | where {$_.IsEntry} 
+    if ($requestedTags -ne $null) { $matched = $matched | where {MatchesTags $TagMatchMode $_.TagValues $requestedTags} }
+    $matched | select Host, Address, Comment, Tags | sort Host
 }
 
 
@@ -531,6 +542,23 @@ function WriteHostsFile([string] $hostsPath) {
 }
 
 
+function DisplaySpash() {
+    if ($version.IsPresent -eq $false -and $env:HostsSplashDisplayed -eq "Y") { return }
+    $verFile = Join-Path $PSScriptRoot "version"
+    $ver = ""
+    if ((Test-Path $verFile) -eq $true) { $ver = "v$((get-content $verFile).Trim())" }
+
+    write-host 
+    write-host "HandyScripts - .\Hosts.ps1" -ForegroundColor Cyan -NoNewline
+    write-host "  $ver" -ForegroundColor Green -NoNewline
+    write-host "  -- David J. Wise -- " -ForegroundColor Cyan -NoNewline
+    write-host "https://github.com/DavidWise/Handy-Scripts" -ForegroundColor Yellow
+    $env:HostsSplashDisplayed = "Y"
+}
+
+DisplaySpash
+
+
 if ($full.IsPresent) {
     Get-Content $hosts | Write-Output
     return
@@ -541,7 +569,7 @@ $TagValues = ParseTag $Tags
 $entries = ParseHostsFile $hosts
 
 if ($listHosts -eq $true) { 
-    ListEntries $entries 
+    ListEntries $entries $TagValues
     return
 }
 
