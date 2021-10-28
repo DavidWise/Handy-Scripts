@@ -1,5 +1,5 @@
 ﻿param(
-    [string] $solutionFolder = (Get-Location).Path # "C:\Dev\SedonaOffice\Unified"
+    [string] $solutionFolder = (Get-Location).Path 
 )
 
 Write-Host "Cleaning solution items in '$($solutionFolder)'"
